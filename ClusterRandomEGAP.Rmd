@@ -49,7 +49,7 @@ options(digits=3,scipen=6)
 
 **How to use and improve this guide.**
 
-This guide and all of the code it contains is available for copying at <https://github.com/bowers-illinois-edu/EgapMethodsGuides>. We encourage you to copy and improve the guide (see <https://guides.github.com/activities/forking/> for one workflow in which you copy the guide, make your own changes, and then request that we include your changes in the main guide.
+This guide and all of the code it contains is available for copying at <https://github.com/bowers-illinois-edu/EgapMethodsGuides>. We encourage you to copy and improve the guide. See <https://guides.github.com/activities/forking/> for one workflow in which you copy the guide, make your own changes, and then request that we include your changes in the main guide.
 
 This guide involves a lot of R code @R-Core-Team:2014aa <http://r-project.org> that we use to show how things work and to enable you to experiment and also to adapt it for your own particular purposes.
 
