@@ -1,0 +1,1499 @@
+---
+title: "6+ Things You Need to Know About Cluster Randomization"
+author: "Jake Bowers and Ashlea Rundlett"
+date: "November 5, 2014"
+output:
+  html_document:
+    fig_caption: true
+    number_sections: true
+    toc: true
+    toc_depth: 2
+    citation-abbreviations: false
+bibliography: cluster.bib
+---
+
+\newcommand{\pr}{\text{pr}}
+\newcommand{\Dt}{\Delta t}
+\newcommand{\bz}{\mathbf{z}}
+\newcommand{\bm}{\mathbf{m}}
+
+\newcommand{\by}{\mathbf{y}}
+\newcommand{\bY}{\mathbf{Y}}
+\newcommand{\bI}{\mathbf{I}}
+
+\newcommand{\e}{\mathrm{e}}
+\newcommand{\E}{\mathrm{E}}
+\newcommand{\bx}{\mathbf{x}}
+\newcommand{\bX}{\mathbf{X}}
+\newcommand{\bZ}{\mathbf{Z}}
+
+\newcommand{\be}{\mathbf{e}}
+\newcommand{\var}{\mathrm{Var}}
+\newcommand{\cov}{\mathrm{Cov}}
+
+\newcommand{\bpsi}{\boldsymbol{\psi}}
+\newcommand{\bmu}{\boldsymbol{\mu}}%m
+\newcommand{\bbeta}{\boldsymbol{\beta}}
+\newcommand{\bdelta}{\boldsymbol{\delta}}
+\newcommand{\bSigma}{\boldsymbol{\Sigma}}
+\newcommand{\bOmega}{\boldsymbol{\Omega}}
+\newcommand{\bgamma}{\boldsymbol{\gamma}}
+
+
+```{r setup, include=FALSE,echo=FALSE,results='hide'}
+require(knitr)
+knitr::opts_chunk$set(message=FALSE,warning=FALSE,eval=TRUE,results='markup',cache=FALSE, comment=NA, tidy=FALSE)
+options(digits=3,scipen=6)
+```
+
+
+**How to use and improve this guide.**
+
+This guide and all of the code it contains is available for copying at <https://github.com/bowers-illinois-edu/EgapMethodsGuides>. We encourage you to copy and improve the guide (see <https://guides.github.com/activities/forking/> for one workflow in which you copy the guide, make your own changes, and then request that we include your changes in the main guide.
+
+This guide involves a lot of R code @R-Core-Team:2014aa <http://r-project.org> that we use to show how things work and to enable you to experiment and also to adapt it for your own particular purposes.
+
+# What it is, what it isn't, and why we use it.
+
+Cluster randomized experiments allocate treatments across entire groups of individuals. Such studies typically measure outcomes at the level of the individual even though the intervention occurs at the level of the group. A study randomly assigning villages to receive different development programs but measuring individual level outcomes and a study randomly assigning households to receive different voter mobilization messages but measuring the vote turnout of individuals are both cluster randomized experiments: villages and households are the assignment units and individuals are the outcome units. A study which samples villages from the experimental pool, and then randomly assigns some of the people in each village to a treatment is not a cluster randomized experiment: in this study, the unit of assignment is the individual. A study which randomly assigned villages to an intervention and then measures village level responses is also not a cluster randomized study: it is a village level study, the units of assignment and outcome are the same.
+
+Cluster randomization is not block randomization. If an experimenter believes that outcomes carry variation from pre-treatment covariates *and/or* that treatment effects will differ in substantively important ways between subgroups, she may divide the experimental pool into groups that are homogeneous on those covariates (like gender or village size) and randomize within those blocks --- effectively turning one large experiment into multiple mini-experiments.  For example, one can first collect clusters of individuals (schools, classrooms, villages, households) into blocks and then have a blocked cluster randomized experiment in order to learn about subgroup differences in treatment effects and also to increase the precision of statistical tests. In this guide, we ignore blocking in order to focus on cluster-lever or group-level treatment assignment with individual-level measurement.
+
+Researchers commonly randomize at the cluster level either because they care about village/school/household level interventions in and of themselves *or* because reaching the individuals within those clusters is too costly and difficult.
+
+# Why Cluster Randomization can cause problems
+
+Cluster randomized experiments have at least two units of analysis: We commonly see few large assignment units ($J$), each containing some outcome units ($n_j$) and thus the total sample size depends on both assignment and outcome units $N=\sum_{j=1}^{J} n_j$.
+
+Cluster randomized experiments raise two new questions for analysts. The first
+question is about weighting, or how to combine information from different parts
+of the same experiment into one quantity. If clusters are not all the
+same size (i.e. $n_j \ne n_k$ for $j \ne k$) then an average treatment effect
+must be *defined* in a weighted fashion and estimation should also involve
+weights. What weights should one use? On what basis should one choose weights?
+One component of weights should account  for the size of the cluster (larger
+clusters tell us more about the treatment effect than smaller clusters ceteris
+paribus). Another component would add that homogeneous clusters (where all
+villagers behave in the same way in response to treatment) tell us less about
+the treatment effect than heterogeneous clusters (where each villager acts as
+if she were more or less independent of the others). If the study is blocked,
+then an analyst need to choose a block-weighting scheme and cluster-weighting
+scheme. @hansen2008 discuss optimal weights for precise testing in blocked
+and cluster-randomized designs. @imai2009essential discuss weighting schemes
+for estimation in paired and cluster-randomizied designs.
+
+The second question is about information.  We commonly summarize the
+information content of a study using the total number of participants, $N$. For
+example, we tend to imagine that a study with 10 people has less information
+about the experimental intervention than a study with 100 people ceteris
+paribus. Yet, two studies with $J=10$ villages and $n_j=100$ people per village
+may have different information about the treatment effect on individuals if, in
+one study, individuals within a village are more or less independent of each
+other versus more or less dependent. If, say, all of the individuals in any
+village acted exactly the same but different villages showed different
+outcomes, then we would have on the order of 10 pieces of information:  all of
+the information about causal effects in that study would be at the village
+level. Alternatively, if the individuals within a village acted more or less
+independently of each other, then we would have on the order of 10 $\times$
+100=1000 pieces of information. For a given variable, we can formalize the idea
+that the highly dependent clusters provide less information than the highly
+independent clusters with the intracluster correlation coefficient. For a given
+variable, $x$, we can write the intracluster correlation coefficient like so:
+
+$$ \rho \equiv \frac{\text{variance between clusters in } x}{\text{total variance in } x} \equiv \frac{\tau_x^2}{\tau_x^2 + \sigma_x^2} $$
+
+where $\sigma_x^2$ is the variance within clusters and $\tau_x^2$ is the
+variance across clusters.  For example, @kish65 uses this description of
+dependence to define his idea of the "effective N" of a study (in the sample
+survey context, where samples may be clustered):
+
+$$\text{effective N}=\frac{N}{1+(n_j -1)\rho}=\frac{Jn}{1+(n-1)\rho}.$$
+
+where the second term follows if all of the clusters are the same size ($n_1= \ldots =n_J \equiv n$).
+
+If 1000 observations arose from 10 clusters with 20 individuals within each
+cluster where 50\% of the variation could be attributed to cluster-to-cluster
+differences (and not to differences within a cluster), Kish's formula would
+suggest that we have the equivalent of about 19 pieces of independent
+information not 10 $\times$ 20=200 pieces.
+
+The inflation in the standard errors for estimators of the average treatment
+effect depends on $\rho$ as well. In this simple case with 10 clusters all the
+same size of 20 and $\rho=.5$, the standard error of the estimator accounting
+for $\rho$ is  $1+(n-1)\rho=10.5$ times larger than the standard error that a
+simple $t$-test from a linear regression would provide: if
+$\text{Var}(\hat{\bar{y}}_{Z_{ij}=1})=s^2/n$ then accounting for clustered
+assignment with same size clusters would give us
+$\text{Var}(\hat{\bar{y}}_{Z_{ij}=1})=s^2/(J n) (1-(n-1)\rho)$.^[See the
+following pieces for more discussion in general of the problems that arise from
+clustered designs in the study of politics @stokboweerr:2002, @stokbowe:2002,
+@green2007acr, @arceneaux2009modeling]
+
+The fact that most clustered designs contain less information than observations
+can lead to invalid statistical inferences. If, for example, the true standard
+error is ten times the estimated standard error, then our confidence intervals
+and statistical tests will be wildly invalid --- we will be rejecting the null
+of no effects much too often. Without accounting for the design, we will be
+mislead by reports that we have ample information to reject a null of no
+effects:  We will claim that a result is "statistically significant" when it is
+not.
+
+# Statistical inference for the average treatment effects in cluster randomized experiments part 1: Design-Based Approaches
+
+## What is a standard error?
+
+How would an estimate of the average treatment effect vary if we repeated the
+experiment on the same group of villages and people within villages? The
+standard error of an estimate of the average treatment effect is one answer to
+this question. Here, for example, we simulate a simple, individual-level
+experiment to develop intuition about what a standard error is.^[See [link to
+other EGAP Methods manual] for a demonstration that the difference of means in
+the observed treatment and control groups is an unbiased estimator of the
+average treatment effect itself and what it means to be unbiased.]
+
+```{r simplese, cache=TRUE}
+N<-100
+tau<-.25
+y0<-rnorm(N) ## potential outcomes to control
+y1<-y0+tau   ## potential outcomes to treatment are a simple function of y0
+Zrealized<-sample(rep(c(0,1),N/2)) ## Assign treatment to half
+
+fastmean<-function(x){
+  ## A Fast mean calculator (see the mean.default function for all it does that we do not want to do)
+  .Internal(mean(x))
+}
+
+fastvar<-function(x){
+  ## See var for this. Right now it removes missing values
+  .Call(stats:::C_cov,x,NULL,5,FALSE)
+}
+
+simEstAte<-function(Z,y1,y0){
+  ## A function to re-assign treatment and recalculate the difference of means
+  Znew<-sample(Z)
+  Y<-Znew*y1+(1-Znew)*y0
+  estate<-fastmean(Y[Znew==1])-fastmean(Y[Znew==0])
+  return(estate)
+}
+
+set.seed(12345)
+simpleResults<-replicate(100000,simEstAte(Z=Zrealized,y1=y1,y0=y0))
+sd(simpleResults) ## The standard error of the estimate of the ATE.
+```
+
+Although this preceding standard error is intuitive (it is merely the standard
+deviation of the distribution arising from repeating the experiment), more
+statistics-savvy readers will recognize closed-form expressions for the
+standard error like the following  (see @gerber2012field and
+@dunning2012natural for easy to read explanations and derivations of the
+design-based standard error of the simple estimator of the average treatment
+effect). If we write $T$ as the set of all treated units and $C$ as the set of all non treated units, we might write 
+
+$$ \widehat{\text{Var}}(\hat{\tau})=s^2(Y_{i,i \in T})/m + s^2(Y_{i,i \in C}/(n-m) $$
+
+where $m$ is the number assigned to treatment and $s^2(x)=(1/n-1) \sum_{i=1}^n (x_i - \bar{x})^2$.  Here we compare the results of the simulation to this most common standard error as well as to the "true" version (which requires that we know the potential outcomes so as to calculate their covariance):
+
+```{r analyticse}
+
+## True SE (Dunning Chap 6, Gerber and Green Chap 3 and Freedman, Pisani and Purves A-32) including the covariance between the potential outcomes
+
+V<-var(cbind(y0,y1))
+varc<-V[1,1]
+vart<-V[2,2]
+covtc<-V[1,2]
+n<-sum(Zrealized)
+m<-N-n
+
+varestATE<-((N-n)/(N-1))*(vart/n) + ((N-m)/(N-1))* (varc/m) + (2/(N-1)) * covtc
+seEstATE<-sqrt(varestATE)
+
+## And the finite sample *feasible* version (where we do not observe the potential outcomes) and so we do not have the covariance
+Yobs<-Zrealized*y1+(1-Zrealized)*y0
+varYc<-var(Yobs[Zrealized==0])
+varYt<-var(Yobs[Zrealized==1])
+fvarestATE<-(N/(N-1)) * ( (varYt/n) + (varYc/m) )
+estSEEstATE<-sqrt(fvarestATE)
+
+##  Here we use the HC2 standard error --- which Lin 2013 shows is the randomization justied SE for OLS.
+library(sandwich)
+library(lmtest)
+
+lm1<-lm(Yobs~Zrealized)
+
+## Other SEs
+iidSE<- sqrt(diag(vcov(lm1)))[["Zrealized"]]
+
+## Worth noting that if we had covariates in the model we would want this one (which is identical to the previous one without covariates).
+NeymanSE<-sqrt(diag(vcovHC(lm1,type="HC2")))[["Zrealized"]]
+
+c(simSE=sd(simpleResults),feasibleSE=estSEEstATE, trueSE=seEstATE, olsIIDSE=iidSE, NeymanDesignSE=NeymanSE)
+
+```
+
+We see that the feasible (also known as the conservative SE) and the true SE
+are the same to 3 digits here, where as the OLS versions are a bit smaller and
+the simulated standard error is also very close. These standard errors will
+diverge when covariates are introduced into the linear model. And, of course,
+the true version is rarely calculable since we rarely have access to the true
+potential outcomes. 
+
+## Standard Errors reflecting cluster-assignment of treatment
+
+To begin, we will create a function which simulates a cluster randomized
+experiment with fixed intracluster correlation.^[Code available on the github
+repository shows that the ICC will increase as an additive cluster-level
+treatment effect increases. See @mathieu2012understanding and
+@mathieu2012understandingErr for some code that inspired the code we use here.]
+
+```{r}
+ClusteredData<-function(J,n,tau,rho){
+  ## Inspired by Mathieu et al, 2012, Journal of Applied Psychology
+  if (J %% 2 != 0 | n %% 2 !=0) {
+    stop(paste("Number of clusters (J) and size of clusters (n) must be even."))
+  }
+
+  ## If we do not inflate the variation in the baseline potential outcome (y0)
+  ## by a function of tau (cluster level additive effect), then as tau increases,
+  ## the ICC will necessarily increase.
+
+  #y0j<-rnorm(J,0,sd=sqrt(rho))
+  y0j<-rnorm(J,0,sd=(1+tau)^2 * sqrt(rho))
+  dat<-expand.grid(i=1:n,J=1:J)
+  #dat$y0 <- rnorm(n*J,0,sd=sqrt(1-rho))+y0j[dat$J]
+  dat$y0 <- rnorm(n*J,0,sd=(1+tau)^2 * sqrt(1-rho))+y0j[dat$J]
+  dat$y1 <- with(dat,fastmean(y0)+tau+(y0-fastmean(y0))*(2/3)) ## give treated group mean shift of tau but also smaller variance
+  dat$Zi <- ifelse(dat$J %in% sample(1:J,J/2) == TRUE, 1, 0)
+  dat$Y  <- with(dat, Zi*y1 + (1-Zi)*y0)
+  return(dat)
+}
+```
+
+```{r, echo=FALSE,eval=FALSE}
+ClusteredData2<- function(J,n,tau,rho){
+  ## In this example, the ICC for Y increases as tau increases even if the ICC for y0 is constant
+   ## y0 is potential outcome in absence of treatment. It will have some cluster dependence
+  dat<-data.frame(i=1:(J*n),J=rep(1:J,n))
+  dat$y0 <- sqrt(rho/(1-rho))*rnorm(J)[dat$J] + rnorm(J*n,sd=sqrt(1-rho))
+  dat$y1<-with(dat,mean(y0)+tau+(y0-mean(y0))*(2/3)) ## give treated smaller variance
+  dat$Zi <- ifelse(dat$J %in% sample(1:J,J/2) == TRUE, 1, 0)
+  dat$Y <- with(dat, Zi*y1 + (1-Zi)*y0)
+  return(dat)
+}
+```
+
+
+
+```{r checkrho, eval=FALSE, echo=FALSE}
+library(ICC)
+library(parallel)
+source("code/mydeff.r")
+
+checkICCs<-function(J,n,rho,tau){
+  dat2<-ClusteredData2(J=J,n=n,tau=tau,rho=rho)
+  dat<-ClusteredData(J=J,n=n,tau=tau,rho=rho)
+  dat$JF<-factor(dat$J)
+  dat2$JF<-factor(dat2$J)
+  return(c(datICC=ICCbare(y=Y,x=JF,data=dat)[[1]]-rho,
+           dat2ICC=ICCbare(y=Y,x=JF,data=dat2)[[1]]-rho,
+           mydeff=mydeff(cluster=dat$JF,y=dat$Y)[[3]]-rho,
+           mydeff2=mydeff(cluster=dat2$JF,y=dat2$Y)[[3]]-rho
+           )
+  )
+}
+
+checkICCs(100,10,.1,tau=10)
+checkICCs(100,10,.1,tau=.1)
+
+thetaus<-seq(0,10,length=50)
+
+blah<-mclapply(thetaus,function(atau){
+               replicate(10,checkICCs(100,10,rho=.1,tau=atau))
+  },mc.cores=detectCores())
+names(blah)<-thetaus
+
+tmp<-simplify2array(blah)
+
+plot(range(thetaus),range(as.vector(tmp)),type="n")
+points(thetaus,apply(tmp["datICC",,],2,median),col="red")
+points(thetaus,apply(tmp["dat2ICC",,],2,median),col="blue")
+points(thetaus,apply(tmp["mydeff",,],2,median),col="red")
+points(thetaus,apply(tmp["mydeff2",,],2,median),col="blue")
+```
+
+Simulate some data from a simple cluster-randomized design for other
+demonstrations.
+
+```{r}
+set.seed(12345)
+pretendDat<-ClusteredData(J=100,n=10,tau=.25,rho=.1)
+
+```
+
+## Cluster-Level Analysis
+
+When the assignment units are clusters and the analysis units are individuals,
+the standard error refers to repeated reassignments of treatment to clusters.
+One way to avoid the problem of changing the way that standard errors are
+calculated is to analyze the data at the level of the cluster --- that
+is, to take averages or sums of the outcomes within the clusters, and then to
+treat the study as a single-level study (with weights if the clusters vary in
+size) (See @dunning2012natural for an argument in favor of this approach).
+
+@hansen2008 also recommend a variant of this approach which we demonstrate
+here. They write a test statistic as a cluster-weighted difference of means:
+$d(\bz,\by) =\bz^{T}\by/\bz^{T} \bm - (1-\bz)^{T} \by / (1-\bz)^{T} \bm$ where
+$\bm$ is a $J \times 1$ vector recording the size of each cluster, and $\bz$
+and $\by$ are also both $J \times 1$ vectors recording the treatment assignment
+and observed outcome of each cluster respectively. They then show that one can
+write a difference of means as a shifted sum, $d(\bz,\by) =\bz^{T}\by *(n/(m_0
+n_t (n - n_t))) - \mathbf{1}^{T} \by /( m_0 (n - n_t))$ where $m_0$ is the size
+of a cluster, $n$ is the size of the experimental pool of clusters, and $n_t$
+is the number of treated clusters (using their notation to make study of that
+paper easier) and thus that we can characterize the distribution of the
+difference of means using what we know about the distribution of the only
+random piece of this expression, the sum of the outcome in the treatment group
+--- $\bz^{T}\by$. We demonstrate this approach here:
+
+
+```{r}
+## Make a data frame at the cluster level
+clusterDat<-data.frame(Yj=tapply(pretendDat$Y,pretendDat$J,sum),
+		       Zj=tapply(pretendDat$Zi,pretendDat$J,unique))
+row.names(clusterDat)<-attr(clusterDat$Zj,"dimnames")[[1]]
+clustersize<-table(pretendDat$J)
+clusterDat[names(clustersize),"mj"]<-clustersize
+clusterDat$ids<-as.numeric(row.names(clusterDat))
+
+## Three equivalent formulas following Hansen and Bowers 2008 for the difference of means given clustered treatment assignment (and equal sized clusters and no blocking).
+
+dp1<-function(x,z,m){
+  crossprod(z,x)/crossprod(z,m) - crossprod(1-z,x)/crossprod(1-z,m)
+}
+
+dp2<-function(x,z,m0){
+  ## m0 is a scalar cluster size
+  nt<-sum(z)
+  nc<-sum(1-z)
+  k0<-m0*nt
+  k1<-m0*nc
+  crossprod(z,x)/k0 - crossprod((1-z),x)/k1
+}
+
+dp3<-function(x,z,m0,nt=sum(z),n=length(z)){
+  ## m0 is a scalar cluster size
+  ones<-rep(1,length(x))
+  crossprod(z,x)*(n/(m0*nt*(n-nt))) - crossprod(ones,x)/(m0*(n-nt))
+}
+
+## Given equal sized clusters and no blocking, this is just the difference of means:
+
+
+c(dp1= with(clusterDat,dp1(Yj,Zj,mj)),
+  dp2= with(clusterDat,dp2(Yj,Zj,unique(mj))),
+  dp3= with(clusterDat,dp3(Yj,Zj,unique(mj))),
+  meandiff = with(pretendDat,mean(Y[Zi==1])-mean(Y[Zi==0])) )
+```
+
+Here we use the @hansen2008 approach to calculate the standard error of the
+difference in means as an estimator of the average treatment effect.
+
+
+```{r}
+## Now we use the Hansen and Bowers 2008 approach for the variance of the cluster-level diff of means (recall var(a*x)=a^*var(x)
+# Notice that we have the cluster-size in the denominator where, in the simple calc of the design-based variance of the total of Y in the treatment group we do not refer to cluster size
+# We are still assuming equal cluster sizes.
+
+## Because the dp3 representation has only one random term crossprod(z,x), we can approximate the design based variance of this test statistic dp() using the variance(crossprod(z,x)*constant)
+
+n<-nrow(clusterDat) ## number of clusters
+nt<-sum(clusterDat$Zj) ## fixed number of treatment assigned clusters
+
+## This from Lohr on Variance of sample total.
+##Vtot <- with(clusterDat,(n^2) * (1-(nt/n)) * ( var(Yj[Zj==1])/nt ))
+##sqrt(Vtot)
+
+## Testing our code
+## library(survey)
+## des<-svydesign(ids=~ids,data=clusterDat[clusterDat$Zj==1,],fpc=rep(.5,n/2))
+##thetot<-svytotal(~Yj,design=des)
+##thetot
+
+m0<-unique(clusterDat$mj) ## assuming all clusters same size
+Vdp<-(n/(m0*nt*(n-nt)))*(var(clusterDat$Yj)/m0)
+sqrt(Vdp)
+
+## We can evaluate the hypothesis of no effects with this Normal approximation:
+
+## First show that our analytics are on target
+set.seed(12345)
+thedist<-with(clusterDat,replicate(10000,dp3(Yj,sample(Zj),m0)))
+sd(thedist)
+
+plot(density(thedist))
+curve(dnorm(x,mean=0,sd=sqrt(Vdp)),col="red",add=TRUE)
+
+obsmeandiff<-with(clusterDat,dp3(Yj,Zj,m0))[1,1]
+
+pSim<-2*min( mean(thedist>=obsmeandiff),mean(thedist>=obsmeandiff))
+##pH0<-2*min(pnorm(c(-1,1)*obsmeandiff,mean=0,sd=sqrt(Vdp)))
+pH0<-2*(1-pnorm(abs(obsmeandiff)/sqrt(Vdp),mean=0))
+
+c(SimulatedP=pSim,HansenBowersP=pH0)
+
+```
+
+And here we combine the preceding into a general use unfunction
+for testing the null of no effects in large samples using the difference of
+means.
+
+```{r hbtest}
+hbtest<-function(x,z,m0,n=length(z),nt=sum(z)){
+  ## Hansen and Bowers 2008 based test for diff of means with cluster level assignment
+  ## assuming same size clusters. See also that article for other caveats about the Normal
+  ## approximation used here.
+  obsmeandiff<-dp3(x=x,z=z,m0=m0,nt=nt,n=n)[1,1]
+  ## Returns a two tailed p-value for the test of the null of no effects
+  Vdp<-(n/(m0*nt*(n-nt)))*(fastvar(x)/m0)
+  ## tailp<-pnorm(obsmeandiff/sqrt(Vdp))
+  ## 2*min(c(tailp,1-tailp))
+  return( 2*(1-pnorm(abs(obsmeandiff)/sqrt(Vdp))) )
+}
+
+
+with(clusterDat,hbtest(x=Yj,z=Zj,m0=m0))
+
+```
+
+## Individual Level Analysis accounting for clustering
+
+Alternatively, one could adjust the IID standard error for clustering. If all
+clusters are the same size, $n_1=\ldots=n_J=n$, and the experiment has no blocking, the formula
+that summarizes this repetition is:
+
+$$\text{Var}_\text{clustered}(\hat{\tau})=\frac{\sigma^2}{\sum_{j=1}^J \sum_{i=1}^n_j (Z_{ij}-\bar{Z})^2} (1-(n-1)\rho) $$
+
+where $\sigma^2=\sum_{j=1}^J \sum_{i=1}^n_j (Y_{ij} - \bar{Y}_{ij})^2$ (following @arceneaux2009modeling ).
+
+This adjustment is commonly known as the "Robust Clustered Standard Error" or
+RCSE. Here we demonstrate how the RCSE relates to the standard error calculated
+by (1) ignoring the clustering and (2) repeating the experiment using known potential outcomes.
+
+If we repeat the experiment we can see the variation in the treatment effect
+calculated at the individual level induced by re-assignment of treatment to
+clusters.
+
+
+
+```{r rcsesim, cache=TRUE}
+
+rcse <- function(model, cluster){
+  ## clustered standard errors from http://drewdimmery.com/robust-ses-in-r/
+  ##require(sandwich)
+  ##require(lmtest)
+  M <- length(unique(cluster))
+  N <- length(cluster)
+  K <- model$rank
+  dfc <- (M/(M - 1)) * ((N - 1)/(N - K))
+  uj <- apply(estfun(model), 2, function(x) tapply(x, cluster, sum));
+  rcse.cov <- dfc * sandwich(model, meat = crossprod(uj)/N)
+  rcse.se <- coeftest(model, rcse.cov)
+  return(list(rcse.cov, rcse.se))
+}
+
+## Yet another way to calculate a mean difference:
+lm2<-lm(Y~Zi,data=pretendDat)
+lm2rcse<-rcse(lm2,pretendDat$J)
+iidSE2<- sqrt(diag(vcov(lm2)))[["Zi"]]
+rcSE2<-sqrt(diag(lm2rcse[[1]]))[["Zi"]]
+
+
+## Now benchmark these analytic results against what we would see if we knew the potential outcomes and could repeat the design.
+simEstAteClustered<-function(J,y1,y0){
+  ## Equal sized clusters and equal numbers of treated and control clusters
+  z.sim <- sample(1:max(J), max(J)/2)
+  Znew <- ifelse(J %in% z.sim == TRUE, 1, 0)
+  Y<-Znew*y1+(1-Znew)*y0
+  estate<-fastmean(Y[Znew==1])-fastmean(Y[Znew==0])
+  return(estate)
+}
+
+set.seed(12345)
+clusterResults<-replicate(10000,
+			  simEstAteClustered(J=pretendDat$J,
+					     y1=pretendDat$y1,
+					     y0=pretendDat$y0))
+
+
+c(simClusterSE=sd(clusterResults),
+  rcSE=rcSE2,
+  iidSE2=iidSE2)
+
+```
+
+When we ignore the clustered-assignment, the standard error is small. The RCSE and the directly simulated version agree, within simulation error, to three digits. Now, one question is whether the RCSE is a good approximation directly repeating the experiment if the experiment is small. (We set aside questions of whether the coverage of confidence intervals for the next section.)
+
+Here we show that the RCSE is sensitive to the number of clusters.
+
+```{r compareclusters,cache=TRUE}
+## And now showing that the simulated and rcse results become the same
+## once the number of clusters is large (revealing that the rcse is consistent in the number of clusters).
+##  require(ICC)
+compareClusterSEs<-function(J,n,tau){
+  set.seed(12345)
+  pretendDat3<-ClusteredData(J,n,tau,.1)
+  ##theicc<-ICCbare(y=Y,x=J,data=pretendDat3)
+  set.seed(12345)
+  clusterResults3<-replicate(10000,
+			     simEstAteClustered(J=pretendDat3$J,
+						y1=pretendDat3$y1,
+						y0=pretendDat3$y0))
+  lm3<-lm(Y~Zi,data=pretendDat3)
+  lm3rcse<-rcse(lm3,pretendDat3$J)
+  iidSE3<- sqrt(diag(vcov(lm3)))[["Zi"]]
+  rcSE3<-sqrt(diag(lm3rcse[[1]]))[["Zi"]]
+  return(c(##ICC=theicc[[1]],
+	   simClusterSE=sd(clusterResults3),
+	   rcSE=rcSE3,
+	   iidSE2=iidSE3))
+}
+
+compareClusterSEs(4,10,.25)
+compareClusterSEs(30,10,.25)
+compareClusterSEs(100,10,.25)
+compareClusterSEs(1000,10,.25)
+
+```
+Standard errors accounting for clustering (the ``rcSE``) and the simulation
+based standard error (``simClusterSE``) come to resemble one another more and
+more as the number of clusters increases. Meanwhile, the standard error
+ignoring clustering tends to be smaller than either of the other standard
+errors. This raises the question about when tests and confidence intervals
+based on these standard errors will perform well and when they will perform
+poorly: the fact that some standard errors are smaller than others does not
+tell us that we should avoid the small ones. Thus, in the next section we
+assess the false positive rate of tests based on these standard errors.
+
+Notice that by holding cluster size fixed here we can assume that the size of
+the cluster is unrelated to the potential outcomes. If cluster sizes do vary
+then @middleton2008bias and @middleton2011unbiased teach us about how to adjust
+standard errors and estimates of the ATE to avoid bias. See also @small2008rig
+and @hansenbowers2009att for flexible approaches to design-based tests of
+causal effects in experiments with cluster-assignment and non-compliance,
+unequal sized clusters, and covariates used to increase precision.
+
+
+## Design-based performance of different methods of accounting for clustered assignment.
+
+Here we show that the false positive rate of tests based on
+RCSE standard errors tends to be incorrect when the number of clusters is
+small. The individual-level plus cluster-correction approach becomes valid only
+when the number of clusters is large.^[A valid test is one with an error rate
+less than or equal to the declared level of the test -- here pegged at
+$\alpha=.05$. Valid tests may be overly conservative, but not overly liberal.]
+
+```{r errorrates, cache=TRUE}
+
+confint.HC<-function (b, df, level = 0.95, thevcov, ...) {
+  ## CI for lm with custom vcov 
+  ## a stripped down copy of the confint.lm function adding "thevcov" argument
+  a <- (1 - level)/2
+  a <- c(a, 1 - a)
+  fac <- qt(a, df)
+  ses <- sqrt(diag(thevcov))
+  b + ses %o% fac
+}
+
+simAteZeroClustered<-function(J,Y){
+  ## Make the true relationship equal zero by shuffling Z but not revealing new potential outcomes
+  z.sim <- sample(1:max(J), max(J)/2)
+  Znew <- ifelse(J %in% z.sim == TRUE, 1, 0)
+  lm1<-lm(Y~Znew)
+  lm1rcse<-rcse(lm1,J)
+  lm1ci<-confint.HC(b=coef(lm1), thevcov=lm1rcse[[1]], lm1$df.residual)["Znew",]
+  ### is zero in the CI?
+  zeroInCIlm<- 0 >= lm1ci[1] & 0 <= lm1ci[2]
+  ## Make cluster level data following Hansen and Bowers 2008
+  Yj<-tapply(Y,J,sum)
+  Zj<-tapply(Znew,J,fastmean)
+  m0<-unique(table(J))
+  ## Do hbtest
+  zeroNotRej<-hbtest(x=Yj,z=Zj,m0=m0)>=.05
+  return(c(estate=coef(lm1)["Znew"],zeroInCIlm=zeroInCIlm,zeroNotRej=zeroNotRej))
+}
+
+set.seed(12345)
+pretendDatJ4<-ClusteredData(4,10,.25,.1)
+set.seed(12345)
+pretendDatJ10<-ClusteredData(10,10,.25,.1)
+set.seed(12345)
+pretendDatJ30<-ClusteredData(30,10,.25,.1)
+set.seed(12345)
+pretendDatJ100<-ClusteredData(100,10,.25,.1)
+
+J4res<-replicate(10000, simAteZeroClustered(J=pretendDatJ4$J, Y=pretendDatJ4$Y))
+J4error<-apply(J4res,1,mean)[2:3]
+
+J10res<-replicate(10000, simAteZeroClustered(J=pretendDatJ10$J, Y=pretendDatJ10$Y))
+J10error<-apply(J10res,1,mean)[2:3]
+
+J30res<-replicate(10000, simAteZeroClustered(J=pretendDatJ30$J, Y=pretendDatJ30$Y))
+J30error<-apply(J30res,1,mean)[2:3]
+
+J100res<-replicate(10000, simAteZeroClustered(J=pretendDatJ100$J, Y=pretendDatJ100$Y))
+J100error<-apply(J100res,1,mean)[2:3]
+```
+
+```{r}
+desmat<-rbind(J4error,
+      J10error,
+      J30error,
+      J100error)
+colnames(desmat)<-c("OLS+RCSE","Cluster-level")
+print(desmat)
+```
+
+When the number of clusters is very small ($J=4$) the cluster-level approach is
+conservative but the individual-level approach is overly liberal: the 95\% CI
+would exclude the truth 100-66=34% of the time rather than only 100-95=5% of
+the time (or 0% of the time in the case of the cluster-level approach). As the
+number of clusters increases, the performance of both design-based statistical
+inference procedures improves although the RCSE approach continues to be
+liberal compared to the cluster-level approach.
+
+
+# Statistical inference for the average treatment effect in cluster randomized experiments part 2: Model-Based Approaches
+
+## Why call an approach Model-Based versus Design-Based?
+
+We have shown two approaches to statistical inference about the average
+treatment effect which require that (1) that treatment was randomized as
+planned and (2) that the treatment assigned to one unit did not change the
+potential outcomes for any other unit. To clarify concepts and code we  also
+assumed no blocking, no covariates (which could be used to increase precision),
+continuous outcomes, no missing outcomes, and equal sized clusters. We also
+focused on the "intent to treat" effect. The design-based approach can be
+extended to handle more complex designs.^[For example, @hansenbowers2009att
+analyze a cluster-randomized field experiment with one-sided non-compliance and
+a binary outcome using a design-based approach. And @small2008rig show how to
+handle more complex hypotheses about effects in cluster-randomized trial with a
+small number of clusters, covariance adjustment, and non-compliance.] When
+designs are more complicated, deriving the expressions for standard errors can
+become difficult.  An alternative approach is to directly model both the
+outcome (often, when continuous outcomes, as a Normal random variable) *and*
+the cluster-to-cluster differences in the outcome in the control group (often,
+as a Normal random variable, too) using a multilevel model like the following.
+We can write this model in matrix form as follows with $\bY$ the vector of
+observed outcomes which depends on individual level covariates in the matrix,
+$\bX$, and a variance-covariance matrix representing relationships among
+individuals within clusters of $\bSigma_{Y}$, and another model of the
+cluster-to-cluster variation in the coefficients $\bbeta$ (which, here, depends
+on cluster-level variables and another variance-covariance matrix describing
+relations among clusters). @raudenbush:1997 and @raudenbush2000spa,
+@hong2006evaluating and @raudenbush2007strategies all grapple with issues of
+design and causal inference under model-based approaches to the study of
+cluster-randomized trials in the context of education.
+
+\[
+  \begin{aligned}
+  \bY|\bX,\bbeta,\bSigma_Y &\sim N \left( \bX \bbeta, \bSigma_{Y} \right) \label{eq:likeli} \\
+  \bbeta|\bZ,\bgamma,\bSigma_{\beta} & \sim N \left( \bZ \bgamma, \bSigma_{\beta} \right)
+  \end{aligned}
+\]
+
+We can write a piece of this model in scalar form to show that, in our simple
+designs here,  $\bX=1$ and show that $\bbeta$ only refers to the
+cluster-specific intercept, and $\bgamma$ refers to the overall intercept and
+treatment effect estimate.
+
+
+$$
+  \begin{alignat}{1}
+  Y_{ij}=&\beta_{0j}+\varepsilon_{ij}\\
+  &\beta_{0j}=\gamma_{00}+\gamma_{01} Z_{j}+ \nu_{0j}\\
+  \end{alignat}
+$$
+
+
+These kinds of Bayesian-inspired models imply a particular kind of weighting
+across clusters and blocks which arises as a by product of Bayes
+Rule.^[@gelman2007dau for an introduction to multilevel models, including in
+the context of statistical inference for counterfactual causal effects, and
+@gelman2013bayesian (Chap 8) for an account linking Bayesian approaches to
+statistical inference to design and especially randomization.] In particular,
+in this Normal-likelihood and Normal-cluster-prior model, the weights take the
+following form. Where, as we can see, the distribution of the $\bbeta$ depends
+on the different relationships at both the individual and cluster-level. 
+
+
+\[
+  \begin{aligned}
+  \by|\bX,\bbeta,\bSigma_Y,\bgamma,\bZ,\bSigma_{\beta} \sim & N \left( \bX \bZ \bgamma, \bSigma_Y + \bX \bSigma_{\beta} \bX^{T} \right)\\
+  \bbeta|\by,\bZ,\bgamma,\bSigma_{\beta},\bSigma_{\gamma},\bSigma_{Y} \sim N \Biggl( & \begin{aligned}
+  & (\bX^{T} \bSigma_Y^{-1} \bX +\bSigma^{-1}_{\beta})^{-1}( \bX^{T} \bSigma_Y^{-1} \by + \bSigma_{\beta}^{-1} \bZ \bgamma),\\
+  & \qquad (\bX^{T} \bSigma_Y^{-1} \bX+\bSigma_{\beta}^{-1})^{-1}  \end{aligned} \Biggr)
+  \end{aligned}
+\]
+
+Notice that the flavor of these expressions differs from those we discussed
+above. In the design-based approach we referred to repetitions of the
+experiment to derive and check expressions for the variance of estimates that
+accounted for cluster-level assignment. In the model-based approach we state
+that the outcomes were generated according to a probability model (here a
+Normal model) and that the cluster-level relationships also follow a
+probability model (here, also a Normal model). It is sometimes simpler to state
+such models --- even if we do not believe the models as scientific descriptions
+of a known process --- and then to assess their characteristics (say, their
+error rates and power) than it is to derive new expressions for design-based
+estimators when designs are complex.  Furthermore, in some situations where
+clusters (like schools) are many and are a random sample of a population of
+such clusters, the Normal models may describe the outcomes and
+cluster-to-cluster variation process well.^[See @barnard2003psa for an example
+of an application of this approach when we have other problems such as missing
+outcomes, or complex non-compliance.]
+
+## How can we estimate model-based estimates of the ATE?
+
+Here we show that the estimated effect is the same whether we use a simple
+difference of means (via OLS) or a multilevel model in our very simplified
+cluster randomized trial setup.
+
+```{r modelbased, cache=FALSE}
+library(lme4)
+
+lm4<-lm(Y~Zi,data=pretendDatJ30)
+lmer1<-lmer(Y~Zi+(1|J),data=pretendDatJ30, control=lmerControl(optimizer='bobyqa'),REML=TRUE)
+
+c(OLS=coef(lm4)["Zi"],Multilevel=fixef(lmer1)["Zi"])
+```
+
+The confidence intervals differ even though the estimates as the same --- and
+there is more than one way to calculate confidence intervals and hypothesis
+tests for multilevel models. The software in R (@Bates:2014aa, @Bates:2014ab) includes three methods by
+default and @gelman2007dau recommend MCMC sampling from the implied
+posterior. Here we focus on the Wald method only because it is the fastest to
+compute.  Other methods might show other performance when we evaluate these
+methods below.
+
+```{r modelcis, cache=TRUE}
+
+lm4ci<-confint.HC(b=coef(lm4), thevcov=rcse(lm4,pretendDatJ30$J)[[1]], lm4$df.residual)["Zi",]
+lmer1ciWald<-lme4:::confint.merMod(lmer1,parm="Zi",method="Wald")["Zi",]
+lmer1ciProfile<-lme4:::confint.merMod(lmer1,parm=4,method="profile")["Zi",]
+
+rbind(DesignBasedCI=lm4ci,
+      ModelBasedWaldCI=lmer1ciWald,
+      ModelBasedProfileCI=lmer1ciProfile)
+
+```
+
+We can calculate an estimate of the ICC directly from the model quantities (the
+variance of the Normal prior that represents the cluster-to-cluster differences
+in the intercept over the total variance of the Normal posterior).
+
+```{r}
+VC<-as.data.frame(lme4:::VarCorr.merMod(lmer1))
+VC$vcov[1]/sum(VC$vcov)
+
+```
+## How do model-based approaches perform? Validity
+
+We showed that the large-sample/Normal theory design-based statistical
+inference did not produce valid confidence intervals and statistical tests
+until at least 30 if not more clusters. Here we compare the design-based
+approach to the model-based approach (using the Wald method for calculating
+confidence intervals).  Although the outcome-model based approach is Bayesian
+in structure, we can evaluate its properties across repetitions of the design.
+We do this here.
+
+```{r modelci, cache=TRUE}
+
+simAteZeroLmer<-function(J,Y){
+  ## Make the true relationship equal zero by shuffling Z but not revealing new potential outcomes
+  z.sim <- sample(1:max(J), max(J)/2)
+  Znew <- ifelse(J %in% z.sim == TRUE, 1, 0)
+  thelmer<-lmer(Y~Znew+(1|J), control=lmerControl(optimizer='bobyqa'),REML=FALSE)
+  lmer1ciWald<-lme4:::confint.merMod(thelmer,parm="Znew",method="Wald")
+  ## lmer1ciProfile<-lme4:::confint.merMod(thelmer,parm=4,method="profile")
+  ### is zero in the CI?
+  zeroInCIWald <- 0 >= lmer1ciWald[1] & 0 <= lmer1ciWald[2]
+  ## zeroInCIProfile <- 0 >= lmer1ciProfile[1] & 0 <= lmer1ciProfile[2]
+  return(c(estate=fixef(thelmer)["Znew"],
+	   zeroInCIWald=zeroInCIWald #, zeroInCIProfile=zeroInCIProfile
+	   ))
+}
+
+
+J4resLmer<-replicate(1000, simAteZeroLmer(J=pretendDatJ4$J, Y=pretendDatJ4$Y))
+J4errorMLM<-apply(J4resLmer,1,mean)
+
+J10res<-replicate(1000, simAteZeroLmer(J=pretendDatJ10$J, Y=pretendDatJ10$Y))
+J10errorMLM<-apply(J10res,1,mean)
+
+J30res<-replicate(1000, simAteZeroLmer(J=pretendDatJ30$J, Y=pretendDatJ30$Y))
+J30errorMLM<-apply(J30res,1,mean)
+
+J100res<-replicate(1000, simAteZeroLmer(J=pretendDatJ100$J, Y=pretendDatJ100$Y))
+J100errorMLM<-apply(J100res,1,mean)
+```
+
+Here are the error rates for the three approaches to statistical inference in
+cluster-randomized experiments as the number of clusters increases in our
+simple example study. Recall that valid tests would have error rates within 2
+simulation standard errors of .95 --- this would mean that a correct null
+hypothesis would be rejected no more than 5% of the time.
+
+```{r compareerrors}
+twosimse<-2*sqrt( .05*.95/1000)
+print(twosimse)
+mat<-cbind("Multilevel"= c(J4errorMLM[2], J10errorMLM[2],
+		 J30errorMLM[2], J100errorMLM[2]),
+	   desmat
+	   )
+row.names(mat)<-paste("J=",c(4,10,30,100),sep="")
+mat
+
+```
+
+In our simple setup, the individual-level approaches behave about the same way:
+neither the design-based nor the model-based approach produces valid
+statistical inferences until the number of clusters is at least 30. This makes
+sense: both approaches rely on central limit theorems so that a Normal law can
+describe the distribution of the test statistic under the null hypothesis.  The
+cluster-level approach is always valid, but sometimes produces overly large
+confidence intervals (when the number of clusters is small). When the number of
+clusters is large (say, 100), then all approaches are equivalent in terms of
+their error rates. Designs with few clusters should consider either the
+cluster-level approach using the normal approximation shown here or even direct
+permutation based approaches to statistical inference. Of course, the code in
+this guide can be used to assess concerns about test validity at different
+numbers of clusters.
+
+# Designing powerful cluster randomized studies: more small clusters are better than fewer larger ones
+
+We want designs which enable statistical tests to strongly discount hypotheses
+consistent with the data rarely and reject hypotheses inconsistent with the
+data often. Textbooks often say this by referring to the desire to reject false
+hypothesis often (a desire for powerful tests) and to not-reject true
+hypotheses rarely (a desire for valid tests). We've seen that clustered designs
+with few clusters can cause statistical tests to reject data-consistent
+hypotheses too frequently. That is, the assumptions required for the validity
+of common tests (typically, large numbers of observations, or large quantities
+of information in general) are challenged by clustered designs, and the tests
+which account for clustering can be invalid if the number of clusters is small
+(or information is low at the cluster level in general). We've also seen that
+we can produce valid statistical tests for hypotheses about the average
+treatment effect using either Robust Clustered Standard Errors (RCSE) or
+Multilevel models or using the cluster-level approach described by @hansen2008.
+Valid tests are a precondition for thinking about powerful tests.  Since we
+know how to produce valid statistical inferences, we can then ask whether we
+can enhance our ability to detect average treatment effects (to distinguish
+them from zero) using design.
+
+The most important rule regarding the statistical power of clustered designs is
+that more small clusters are better than fewer larger ones.  We will
+demonstrate this here. However, for some intuition consider again the formula
+for the effective sample size with equal sized clusters and no blocking.
+
+$$\text{effective N}=\frac{Jn}{1+(n-1)\rho}.$$
+
+Note that the size of each cluster $n$ is present in both the numerator and
+denominator, the number of clusters $J$ is only present in the numerator. The
+size of each cluster, then, will do very little to increase our power unless
+the within-cluster dependence ($\rho$) is very small.
+
+Here we demonstrate two approaches to calculating the power of
+cluster-randomized research designs: a fast approach based on closed-form
+expressions for the power of tests from multilevel models and a slow approach
+based on simulation. A closed-form approach based on the expressions from the
+RCSE and the cluster-level approaches would also be possible. We do not provide
+those expressions here, for now, since the Multilevel approach appears both
+more complex in terms of deriving power formulas and roughly equivalent to the
+RCSE approach in terms of validity based on our previous simulations presented
+above.
+
+## Analytic Model-Based Power Analysis
+
+@raudenbush2000spa and @raudenbush:1997 provide an expression for the power of
+a multilevel-model based test that enables quick evaluation of different
+multilevel design proposals defined by expected intracluster correlation
+($\rho$), the fixed false positive rate ($\alpha$), the effect size (Cohen's
+$d$)(which is a standardized measure of the treatment effect that is common in
+psychology and educational research --- it is roughly twice the standardized
+difference of means or standardized OLS $\beta$), the number of outcome units
+($n$), and the number of assignment units ($J$). See @spybrook2011optimal for
+detailed explanations of these expressions.
+
+```{r raudpow}
+crtpow2<-function(alpha, d, rho, n, J){
+  # Raudenbush (1997) power function see for details: http://hlmsoft.net/od/od-manual-20111016-v300.pdf
+  ## rho=intraclass correlation [i.e. homogeneity within level-2 units]
+  ## alpha=alpha level (here, power=power to detect an effect size of d at a=.05-->95% confidence level)
+  ## d=effect size [note: d=.2 is like standardized OLS beta=.1, see Snijders and Bosker(1999), page 147 and below]
+  ## n=number of level-1 units per level-2 unit
+  ## J=number of level-2 units
+  cpow <- 1 - pt(q=qt(1 - alpha, J -2), df=J - 2, ncp=d/(sqrt((4 * (rho + (1 - rho)/ n))/J)))
+  cpow
+}
+```
+
+This function uses quantities that we have already discussed. However, the effect size is defined as the difference of means standardized by the sample standard deviation of the outcome. Here we explore how this effect size relates to other quantities in order to provide some intuition to guide use of the formula:
+
+```{r}
+## About effect sizes measured as Cohen's d. How do they relate to a standardized mean difference?
+## The unstandardized effect is the simple difference of means:
+lmtemp<-lm(Y~Zi,data=pretendDat)
+coef(lmtemp)["Zi"]
+## Simple estATE
+with(pretendDat,{ mean(Y[Zi==1]) - mean(Y[Zi==0]) })
+
+## Here are two ways to think of the standardized effect size used in crtpow2()
+## Cohen's d is this standardized effect
+my.pooled.sd<-function(x,z){
+  ## x is the numeric variable
+  ## z is binary treatment
+  ### the.vars <- tapply(x, z, var, na.rm = TRUE)
+  ### the.pooled.sd <- sqrt(sum(the.vars)/2)
+  ## this next is faster and taken from pairwise.t.test
+  s <- tapply(x, z, sd, na.rm = TRUE)
+  nobs <- tapply(!is.na(x), z, sum)
+  degf <- nobs - 1
+  total.degf <- sum(degf)
+  return(sqrt(sum(s^2 * degf)/total.degf))
+ }
+
+thed<-with(pretendDat,{ ( mean(Y[Zi==1])-mean(Y[Zi==0]) ) / my.pooled.sd(Y,Zi) })
+thed
+
+## or following  Section 7 in Spybrook et al 2011
+with(pretendDat,{ ( mean(Y[Zi==1])-mean(Y[Zi==0]) ) / sd(Y) })
+
+## This standardized effect is different from the standardized regression coefficient in which treatment itself is standardized
+## Standardized diff of means (regression beta)
+lm.beta<-function(obj,term){
+  ## from QuantPsyc
+  b <- coef(obj)[term]
+  sx <- sd(obj$model[[term]])
+  sy <- sd(model.response(obj$model))
+  beta <- b * sx/sy
+  return(beta)
+}
+
+thetau<-lm.beta(lmtemp,"Zi")
+thetau
+
+## Another version of the standardized regression coef:
+coef(lm(scale(Y)~scale(Zi),data=pretendDat))[2]
+
+## So, a d of about .128 is a standardized reg coef of about .064
+(thed/thetau)[[1]]
+
+## So to use this function thinking in terms of standardized regression coefficients, one would double the desired coefficient.
+## crtpow2(alpha=.05,d=.5,rho=0.3,n=10,J=50)
+```
+
+Now we will watch how power changes as we trade $n$ for $J$ and vary $\rho$ for $d=.3 \approx \tau=.15$.
+
+```{r applycrt2pow2,echo=F}
+TheJs <- c(3,5,10,15,20,25,30,35,40,45,50)
+
+powerJrho0.01 <- rep(NA,length(TheJs))
+for (i in 1:length(TheJs)){
+  powerJrho0.01[i]<-crtpow2(alpha=0.05, d=0.3, rho=0.01, n=50, J=TheJs[i])
+}
+powerJrho0.05 <- rep(NA,length(TheJs))
+for (i in 1:length(TheJs)){
+  powerJrho0.05[i]<-crtpow2(alpha=0.05, d=0.3, rho=0.05, n=50, J=TheJs[i])
+}
+
+powerJrho0.1 <- rep(NA,length(TheJs))
+for (i in 1:length(TheJs)){
+  powerJrho0.1[i]<-crtpow2(alpha=0.05, d=0.3, rho=0.1, n=50, J=TheJs[i])
+}
+
+powerJrho0.3 <- rep(NA,length(TheJs))
+for (i in 1:length(TheJs)){
+  powerJrho0.3[i]<-crtpow2(alpha=0.05, d=0.3, rho=0.3, n=50, J=TheJs[i])
+}
+powerJrho0.5 <- rep(NA,length(TheJs))
+for (i in 1:length(TheJs)){
+  powerJrho0.5[i]<-crtpow2(alpha=0.05, d=0.3, rho=0.5, n=50, J=TheJs[i])
+}
+
+## Thens<-c(10,50,100,150,200,250,300,350,400,450,500)
+Thens<-c(4,10,20,30,40,50,60,70,80,90,100)
+powernrho0.05 <- rep(NA,length(Thens))
+for (i in 1:length(Thens)){
+  powernrho0.05[i]<-crtpow2(alpha=0.05, d=0.3, rho=0.05, n=Thens[i], J=50)
+}
+powernrho0.01 <- rep(NA,length(Thens))
+for (i in 1:length(Thens)){
+  powernrho0.01[i]<-crtpow2(alpha=0.05, d=0.3, rho=0.01, n=Thens[i], J=50)
+}
+powernrho0.1 <- rep(NA,length(Thens))
+for (i in 1:length(Thens)){
+  powernrho0.1[i]<-crtpow2(alpha=0.05, d=0.3, rho=0.1, n=Thens[i], J=50)
+}
+powernrho0.3 <- rep(NA,length(Thens))
+for (i in 1:length(Thens)){
+  powernrho0.3[i]<-crtpow2(alpha=0.05, d=0.3, rho=0.3, n=Thens[i], J=50)
+}
+powernrho0.5 <- rep(NA,length(Thens))
+for (i in 1:length(Thens)){
+  powernrho0.5[i]<-crtpow2(alpha=0.05, d=0.3, rho=0.5, n=Thens[i], J=50)
+}
+
+
+```
+
+
+The figure below applies Raudenbush's formula to show (1) the effect on power
+of increasing the number of clusters holding cluster size constant and large
+(at $n=50$) in the left panel versus (2) increasing cluster size while holding
+the number of clusters constant (at $J=50$) in the right panel. The left panel
+shows that power increases as the number of clusters increase but that this
+increase depends on the homogeneity of the clusters: very heterogeneous
+clusters would allow 80% power at roughly 20 clusters (assuming all tests are
+valid), but very homogeneous clusters require many more clusters to achieve the
+same power. The right panel shows that increasing the number of observations
+per cluster has little effect on power even when we allow clusters to become
+very large unless $\rho$ is small --- and even then, there is an upper bound on
+the power from a study with 50 clusters.
+
+```{r,echo=FALSE,eval=TRUE,fig.cap="Effect of Cluster Size and Number of Clusters on Power for Different Values of $\rho$",fig.height=4,fig.width=6,fig.align='center'}
+par(mfrow=c(1,2),mgp=c(1.5, .5,0),oma=rep(0,4))
+
+plotJ0.01 <- smooth.spline(TheJs, powerJrho0.01, spar=0.4)
+plotJ0.05 <- smooth.spline(TheJs, powerJrho0.05, spar=0.4)
+plotJ0.1 <- smooth.spline(TheJs, powerJrho0.1, spar=0.4)
+plotJ0.3 <- smooth.spline(TheJs, powerJrho0.3, spar=0.4)
+plotJ0.5 <- smooth.spline(TheJs, powerJrho0.5, spar=0.4)
+plot(predict(plotJ0.01),
+     xlim=range(TheJs),
+     ylim=c(0,1),
+     type="n",
+     ylab = "Power",
+     xlab= "Number of Clusters",
+     main="Cluster Size=50 \n  Effect Size=.3")
+abline(a=.80,b=0,lty="dashed",col="grey")
+lines(predict(plotJ0.01))
+text(x=25,y=0.95,expression(paste(rho,"= 0.01")),cex=0.8)
+
+lines(plotJ0.05)
+text(x=32,y=0.86,expression(paste(rho,"= 0.05")),cex=0.8)
+
+lines(plotJ0.1)
+text(x=30,y=0.65,expression(paste(rho," = 0.1")),cex=0.8)
+
+lines(plotJ0.3)
+text(x=34,y=0.38,expression(paste(rho,"= 0.3")),cex=0.8)
+
+lines(plotJ0.5)
+text(x=35,y=0.26,expression(paste(rho,"= 0.5")),cex=0.8)
+
+plotn0.01 <- smooth.spline(Thens, powernrho0.01, spar=0.4)
+plotn0.05 <- smooth.spline(Thens, powernrho0.05, spar=0.4)
+plotn0.1 <- smooth.spline(Thens, powernrho0.1, spar=0.4)
+plotn0.3 <- smooth.spline(Thens, powernrho0.3, spar=0.4)
+plotn0.5 <- smooth.spline(Thens, powernrho0.5, spar=0.4)
+plot(predict(plotn0.01),
+     xlim=range(Thens),
+     ylim=c(0,1),
+     type="n",
+     ylab = "Power",
+     xlab= "Cluster size",
+     main="Number of Clusters=50 \n Effect Size=.3")
+abline(a=.80,b=0,lty="dashed",col="grey")
+lines(plotn0.01)
+text(x=30,y=predict(plotn0.01)$y[Thens==30],expression(paste(rho,"= 0.01")),cex=0.8)
+
+lines(plotn0.05)
+text(x=40,y=predict(plotn0.05)$y[Thens==40],expression(paste(rho," = 0.05")),cex=0.8)
+
+lines(plotn0.1)
+text(x=60,y=predict(plotn0.1)$y[Thens==60],expression(paste(rho,"= 0.1")),cex=0.8)
+
+lines(plotn0.3)
+text(x=60,y=predict(plotn0.3)$y[Thens==60],expression(paste(rho," = 0.3")),cex=0.8)
+
+lines(plotn0.5)
+text(x=60,y=predict(plotn0.5)$y[Thens==60],expression(paste(rho," = 0.5")),cex=0.8)
+
+
+```
+
+## Simulations for Power Analysis
+
+The expressions we used above allow researchers to quickly assess many
+different values of $n$, $J$, $\rho$ and effect size. However, they are limited
+to certain designs (designs with equal numbers of treated and control units,
+designs with the same size clusters, with only two treatments, etc...) A
+simulation based approach allows more flexibility in the designs assessed at
+the price of computing time. We demonstrate a power analysis of this kind here.
+
+The general idea should be familiar: first create a dataset to represent the
+design, relationships and variability you expect to see in your study, then
+test hypotheses which are both consistent with the data (to assess error rate)
+and inconsistent with the data (to assess power).  If you have access to
+baseline data, or data on outcomes like the outcomes that you expect to gather,
+we encourage you to use them rather than the normally distributed random
+variables that we use here. For example, we expect power and validity will
+require larger studies if the outcomes are binary or very skewed.
+
+```{r, results='asis'}
+
+
+testH0andHtrue<-function(tau,totJ,n,rho) {
+  ## Make data:
+
+  ### Individual level data
+  newDat<-ClusteredData(J=totJ,n=n,tau=tau,rho=rho)
+  ### Cluster level data following Hansen and Bowers 2008
+  Yj<-with(newDat,tapply(Y,J,sum))
+  Zj<-with(newDat,tapply(Zi,J,fastmean))
+  m0<-unique(table(newDat$J))
+
+  ## Test Hypotheses
+  ### Test null of no effects when no effects is false and tau is true.
+  thelm<-lm(Y~Zi,data=newDat)
+  thelmer<-lmer(Y~Zi+(1|J),data=newDat,control=lmerControl(optimizer='bobyqa'),REML=FALSE)
+
+  lmci<-confint.HC(b=coef(thelm), thevcov=rcse(thelm,newDat$J)[[1]], thelm$df.residual)["Zi",]
+  lmerci<-lme4:::confint.merMod(thelmer,parm="Zi",method="Wald")
+
+  #### Zero should not be in this CI very often.
+  zeroInCIlm<-  0 >= lmci[1] & 0 <= lmci[2]
+  zeroInCIlmer<- 0 >= lmerci[1] & 0 <= lmerci[2]
+
+  ### Do the Hansen and Bowers test and record not-rejections (equiv to "within CI")
+  zeroNotRej<-hbtest(x=Yj,z=Zj,m0=m0)>=.05
+
+  ### Test null of true taus (first attempt is use true, second is to make 0 true)
+  ### Reassign village level treatment so that Y is indep of Z --- so true effect is 0
+
+  newDat$Znew2 <- ifelse(newDat$J %in% sample(1:totJ, max(totJ)/2), 1, 0)
+  Zj2<-with(newDat,tapply(Znew2,J,fastmean))
+
+  thelmTrue<-lm(Y~Znew2,data=newDat)
+  thelmerTrue<-lmer(Y~Znew2+(1|J),data=newDat,control=lmerControl(optimizer='bobyqa'),REML=FALSE)
+
+  lmTrueci<-confint.HC(b=coef(thelmTrue), thevcov=rcse(thelmTrue,newDat$J)[[1]], thelmTrue$df.residual)["Znew2",]
+  lmerTrueci<-lme4:::confint.merMod(thelmerTrue,parm="Znew2",method="Wald")
+
+  trueInCIlm<-  0 >= lmTrueci[1] & 0 <= lmTrueci[2]
+  trueInCIlmer<- 0 >= lmerTrueci[1] & 0 <= lmerTrueci[2]
+
+  trueNotRej<-hbtest(x=Yj,z=Zj2,m0=m0)>=.05
+
+  ## Consolidate results
+  res<-array(NA,dim=c(2,3),dimnames=list(c("zero","true"),c("lm","lmer","hb")))
+  res["zero","lm"]<-zeroInCIlm
+  res["true","lm"]<-trueInCIlm
+  res["zero","lmer"]<-zeroInCIlmer
+  res["true","lmer"]<-trueInCIlmer
+  res["zero","hb"]<-zeroNotRej
+  res["true","hb"]<-trueNotRej
+  return(res)
+}
+
+```
+
+This next code chunk evaluates that preceding function 1000 times for each
+triple of $n$, $J$, and $\tau$ (holding the ICC at .2).
+
+```{r assesspower, cache=FALSE}
+theJ<-c(4,8,10,20,30,50,80,100,200)
+thenj<-c(4,8,10,20,30,50,80,100)
+thetau<-c(.1,.25,.5,.75,1,1.5,2)
+parms<-expand.grid(nj=thenj,J=theJ,tau=thetau)
+
+## This next simulation takes time. To speed computation it uses all cores available (only works on Mac or Linux )
+## The tryCatch() command is a more straightforward way to cache the results and not repeat this expensive computation.
+
+library(parallel)
+tryCatch(load("powerRes.rda"),error=function(e){
+	 powerRes<-mclapply(1:nrow(parms),function(i){
+			    message(paste(i,"/",nrow(parms)))
+			    replicate(1000,testH0andHtrue(tau=parms[i,"tau"],
+							  totJ=parms[i,"J"],
+							  n=parms[i,"nj"],
+							  rho=.2))
+		 },mc.cores=detectCores())
+	 save(powerRes,file="powerRes.rda")
+},finally=load("powerRes.rda"))
+
+```
+
+```{r normpower,eval=FALSE,echo=FALSE}
+## analytic power for the hbtest
+hbtestPower<-function(m0,n,nt,sigx2,alt, thelevels=.95){
+  ## Hansen and Bowers 2008 based test for diff of means with cluster level assignment
+  ## assuming same size clusters. See also that article for other caveats about the Normal
+  ## approximation used here.
+  ## Returns a two tailed p-value for the test of the null of no effects
+  Vdp<-(n/(m0*nt*(n-nt)))*(sigx2/m0)
+
+  alpha <- (1 - thelevels)/2
+  alpha <- c(alpha, 1 - alpha)
+
+  crit<-qnorm(alpha, mean=0,sd=sqrt(Vdp)) ## assuming that the truth is 0
+
+  thepow<- (  pnorm(min(crit),mean=alt,sd=sqrt(Vdp),lower.tail=TRUE) +
+             pnorm(max(crit),mean=alt,sd=sqrt(Vdp),lower.tail=FALSE) )
+
+  return(c(alt=thepow))
+}
+
+
+
+
+```
+
+This chunk collects the results of the preceding simulation.
+
+```{r}
+resArr<-simplify2array(powerRes)
+## str(resArr[,"lm",,])
+powerArrLm<-apply(resArr[,"lm",,],c(1,3),mean)
+powerArrLmer<-apply(resArr[,"lmer",,],c(1,3),mean)
+powerArrHB<-apply(resArr[,"hb",,],c(1,3),mean)
+
+results<-data.frame(parms,
+		    lm=t(powerArrLm),
+		    lmer=t(powerArrLmer),
+		    hb=t(powerArrHB))
+results$lm.zero<-1-results$lm.zero
+results$lmer.zero<-1-results$lmer.zero
+results$hb.zero<-1-results$hb.zero
+```
+
+This next plot shows how the error rates change depending on the number of
+clusters. The vertical variability in the points plotted reflects the different
+effect sizes and cluster sizes. The dashed lines show the bounds that we would
+expect for simulation-to-simulation variability around the .95 line. We see
+that the OLS+RCSE and Multilevel model approaches do not produce valid tests in
+these scenarios until the the number of clusters is at least 30 if not 50.
+
+```{r errorplots,echo=FALSE,eval=TRUE,fig.cap="Error Rates by Number of Clusters",fig.height=4,fig.width=8,fig.align='center'}
+
+## An Estimate of Simulation-to-Simulation Typical Variability
+sim.se<-2*sqrt(.95*(1-.95)/1000)
+theylim<-range(as.vector(results[,c("lm.true","lmer.true","hb.true")]))
+par(mfrow=c(1,3),mgp=c(1.5,.5,0),oma=rep(0,4),mar=c(3,3,3,0))
+
+with(results, plot(J,hb.true,main="Cluster Level Error Rate",
+		   ylab="Proportion True H0=0 in 95% CI",
+		   xlab="Number of Clusters",
+     ylim=theylim))
+abline(h=c(-sim.se,0,sim.se)+.95,lty=c(2,1,2),lwd=.5)
+
+
+with(results, plot(J,lm.true,main="OLS+RCSE Error Rate",
+		   ylab="Proportion True H0=0 in 95% CI",
+		   xlab="Number of Clusters",
+     ylim=theylim))
+abline(h=c(-sim.se,0,sim.se)+.95,lty=c(2,1,2),lwd=.5)
+
+with(results, plot(J,lmer.true,main="Multilevel Model Error Rate",
+		   ylab="Proportion True H0=0 in 95% CI",
+		   xlab="Number of Clusters",
+                   ylim=theylim))
+abline(h=c(-sim.se,0,sim.se)+.95,lty=c(2,1,2),lwd=.5)
+
+```
+
+This next plot shows how power to detect an effect of $\tau$ changes for the
+three approaches to statistical inference in cluster-randomized designs when
+(1) the number of clusters increases (within each plot on the x-axis) and the
+(2) effect size ($\tau$) increases from .1 to 1 (different plots running from
+left to right on each row).  The different lines on each plot show different
+cluster sizes. The cluster-sizes with the minimum and maximum power are
+labelled for each $J$. We compare the three approaches to statistical inference
+used here: the Cluster-level approach, the OLS+RCSE approach, and the
+Multilevel model approach. We see that as the effect size increases power
+increases and that increasing cluster size matters much less than increasing
+the number of clusters. All three approaches provide more or less the same
+power for a given collection of $J$, $n_j$, effect size and $\rho$. We do not
+show power for $J<30$ for the OLS+RCSE and the Multilevel approaches given the
+problems with error rates in those procedures that we discovered above. 
+
+
+```{r powerplotsfn, echo=FALSE}
+
+makematplot<-function(whichtau){
+ 
+  zreallm<-t(matrix(results$lm.zero[results$tau==whichtau],
+		    byrow=FALSE,
+		    nrow=length(thenj),
+		    ncol=length(theJ),
+		    dimnames=list(thenj,theJ)))
+
+  zrealhb<-t(matrix(results$hb.zero[results$tau==whichtau],
+		    byrow=FALSE,
+		    nrow=length(thenj),
+		    ncol=length(theJ),
+		    dimnames=list(thenj,theJ)))
+
+  zreallmer<-t(matrix(results$lmer.zero[results$tau==whichtau],
+		      byrow=FALSE,
+		      nrow=length(thenj),
+		      ncol=length(theJ),
+		      dimnames=list(thenj,theJ)))
+
+  thexlim<-c(min(theJ),max(theJ))
+  theylim<-c(0,1)
+
+  matplot(y=zrealhb,x=theJ,type="l",
+	  xlim=thexlim,ylim=theylim,
+	  main="Cluster-Level",
+	  xlab="Number of Clusters",
+	  ylab=bquote(paste("Power (",alpha==.05,",",tau==.(whichtau),")"))
+	  )
+  maxnjzrealhb<-apply(zrealhb,1,which.max)
+  minnjzrealhb<-apply(zrealhb,1,which.min)
+  text(theJ,zrealhb[cbind(1:nrow(zrealhb),maxnjzrealhb)],thenj[maxnjzrealhb])
+  text(theJ,zrealhb[cbind(1:nrow(zrealhb),minnjzrealhb)],thenj[minnjzrealhb])
+
+  zreallm<-zreallm[theJ>=30,]
+  zreallmer<-zreallmer[theJ>=30,]
+  newJ<-theJ[theJ>=30]
+  newnj<-as.numeric(colnames(zreallm)) ##thenj[theJ>=30] ## Requires nj and J to be same length.
+
+  matplot(y=zreallm,x=newJ,type="l",
+	  xlim=thexlim,ylim=theylim,
+	  main="OLS+RCSE",
+	  xlab="Number of Clusters",
+	  ylab=bquote(paste("Power (",alpha==.05,",",tau==.(whichtau),")"))
+	  )
+  ## Label all lines with nj
+  ##for(i in 1:ncol(zreallm)){
+  ##  text(newJ,zreallm[,i],newnj[i])
+  ##}
+
+  maxnjzreallm<-apply(zreallm,1,which.max)
+  minnjzreallm<-apply(zreallm,1,which.min)
+  text(newJ,zreallm[cbind(1:nrow(zreallm),maxnjzreallm)],newnj[maxnjzreallm])
+  text(newJ,zreallm[cbind(1:nrow(zreallm),minnjzreallm)],newnj[minnjzreallm])
+
+  matplot(y=zreallmer,x=newJ,type="l",
+	  xlim=thexlim,ylim=theylim,
+	  main="Multilevel Model",
+	  xlab="Number of Clusters",
+	  ylab=bquote(paste("Power (",alpha==.05,",",tau==.(whichtau),")"))
+	  )
+  maxnjzreallmer<-apply(zreallmer,1,which.max)
+  minnjzreallmer<-apply(zreallmer,1,which.min)
+  text(newJ,zreallmer[cbind(1:nrow(zreallmer),maxnjzreallmer)],newnj[maxnjzreallmer])
+  text(newJ,zreallmer[cbind(1:nrow(zreallmer),minnjzreallmer)],newnj[minnjzreallmer])
+}
+
+```
+
+```{r powerplots, echo=FALSE,fig.cap="Power by Number of Clusters at Different Effect Sizes and Fixed $\rho=.3$",fig.height=8,fig.width=8,fig.align='center'}
+
+par(mfcol=c(3,4),oma=rep(0,4),mgp=c(1.5,.5,0),mar=c(3,3,3,1))
+makematplot(thetau[1])
+makematplot(thetau[2])
+makematplot(thetau[3])
+makematplot(thetau[5])
+
+```
+
+# Randomization Checks in Clustered Designs
+
+## Why check randomization in a randomized experiment?
+
+There are two reasons to check randomization after treatment has been assigned.
+First, in small experiments, like those in which the cost of administering a
+treatment to another cluster is high, a background covariate of substantive
+importance may have an accidental and unlucky relationship with treatment
+assignment. Imagine that neighborhoods with highly educated households end up
+particularly prevalent in the treatment group during a study of voter turnout.
+A comparison of treated to untreated neighborhoods would then reflect both the
+differences in education between neighborhoods and as well as the treatment
+itself. If the covariate were available during the design stage of the study,
+one could use randomization tests to ensure balance at that stage by doing
+re-randomization (although blocking would make the analysis simpler --- see
+@morgan2012rerandomization).  Second, and more rarely, a randomization test can
+detect errors in the administration of treatment. Finding that the treatment
+was disproportionately allocated to highly educated neighborhoods might lead a
+researcher to take a second look at what happened in the field after treatment
+was assigned.
+
+## How to check randomization?
+
+Randomization checks in clustered designs follow the same form as the preceding
+discussion. A valid test for a treatment effect is a valid test for placebo
+or covariate balance. The only difference  from our preceding discussion is that one
+uses a background covariate or baseline outcome --- some variable putatively
+uninfluenced by the treatment --- in place of the outcome itself. So,
+randomization tests with small numbers of clusters may be too quick to declare
+an experiment ill-randomized if the analyst is not aware of the methods of
+error-rate analysis that we described above.
+
+One new problem does arise in the context of randomization tests. Often one has
+many covariates which could be used to detect unlucky imbalances or field
+problems with the randomization itself. And, if one uses hypothesis tests,
+then, of course, a valid test which encourages us to declare "imbalance" when
+$p<.05$ would do so falsely for one in every twenty variables tested.  For this
+reason, we recommend using one-by-one testing as an exploratory tool and using
+omnibus tests (like the Hotelling T-test or an F-test or the @hansen2008 $d^2$
+test), which can combine information across many dependent tests into one test
+statistic to make balance tests directly.  However, these tests must account
+for the clustered nature of the design: a simple F-test without accounting for
+the clustered-design will likely mislead an analyst into declaring a design
+unbalanced and perhaps charging the field staff with a randomization failure.
+
+Since cluster randomized experiments tend to have cluster-level covariates
+(say, village size, etc..) balance checks at the cluster level make sense and
+do not require explicit changes to account for clustered-assignment.
+@hansen2008 develop such a test and provide software to implement it. So, for
+example, if we had 10 covariates measured at the village level, and we had a
+large number of villages we could assess an omnibus balance hypothesis using
+this design-based but large-sample tool.
+
+Here we show only the omnibus test results. The one-by-one assessments that
+make up the omnibus test are also available in the ``xb1`` object. Here, the
+omnibus test tell us that we have little information against the null that
+these observations arose from a randomized study.
+
+```{r balance, eval=TRUE, results='asis'}
+library(RItools)
+options(digits=3)
+
+## Make a village level dataset
+villageDat<-aggregate(pretendDat,by=list(village=pretendDat$J),mean)
+
+## Generate 40 fake covariates
+set.seed(12345)
+villageDat[paste("x",1:40,sep="")]<-matrix(rnorm(nrow(villageDat)*40),ncol=40)
+balfmla<-reformulate(paste("x",1:40,sep=""),response="Zi")
+## Do a design-based, Large sample balance test.
+xb1<-xBalance(balfmla, 
+              strata=list(noblocks=NULL),
+              data=villageDat,
+              report=c("std.diffs","z.scores","adj.means",
+                    "adj.mean.diffs", "chisquare.test","p.values"))
+## print(xb1$results) ### to see the one-by-one tests
+
+## Show the 10 of 40 one-by-one tests with the lowest p-values
+kable(xb1$results[order(xb1$results[,"p",]),,][1:10,])
+
+## Show the overall omnibus p-value
+kable(xb1$overall)
+
+## Plot the standardized differences
+plot(xb1)
+```
+
+In this case, we cannot reject the omnibus hypotheses of balance even though,
+as we expected, we have a few covariates with falsely low $p$-values. One way
+to interpret this omnibus result is to say that such imbalances on a few
+covariates would not appreciably change any statistical inferences we make
+about treatment effects as long as these covariates did not strongly predict
+outcomes in the control group. Alternatively, we could say that any large
+experiment can tolerant chance imbalance on a few covariates (no more than
+roughly 5% if we are using $\alpha=.05$ as our threshold to reject hypotheses).
+
+**References**
+
+
