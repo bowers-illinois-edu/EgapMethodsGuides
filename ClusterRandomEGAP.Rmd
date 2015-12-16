@@ -470,7 +470,7 @@ Alternatively, one could adjust the IID standard error for clustering. If all
 clusters are the same size, $n_1=\ldots=n_J=n$, and the experiment has no blocking, the formula
 that summarizes this repetition is:
 
-$$\text{Var}_\text{clustered}(\hat{\tau})=\frac{\sigma^2}{\sum_{j=1}^J \sum_{i=1}^n_j (Z_{ij}-\bar{Z})^2} (1-(n-1)\rho) $$
+$$\text{Var}_\text{clustered}(\hat{\tau})=\frac{\sigma^2}{\sum_{j=1}^J \sum_{i=1}^n_j (Z_{ij}-\bar{Z})^2} (1-(n-1)\rho)$$
 
 where $\sigma^2=\sum_{j=1}^J \sum_{i=1}^n_j (Y_{ij} - \bar{Y}_{ij})^2$ (following @arceneaux2009modeling ).
 
